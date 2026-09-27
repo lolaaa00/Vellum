@@ -1,0 +1,31 @@
+{
+  "name": "vellum",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Constitutional execution rails for governed treasuries on GenLayer StudioNet 61999.",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test:contract": "python -m pytest tests/direct -q",
+    "lint:contract": "genvm-lint check contracts/vellum.py && genvm-lint validate contracts/vellum.py && genvm-lint typecheck contracts/vellum.py",
+    "deploy": "genlayer deploy"
+  },
+  "dependencies": {
+    "genlayer-js": "2.0.0-rc.1",
+    "next": "^15.5.25",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8"
+  },
+  "devDependencies": {
+    "@types/node": "^26.5.0",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.7",
+    "eslint": "^9.36.0",
+    "eslint-config-next": "^15.5.25",
+    "genlayer": "^0.40.0-rc.3",
+    "typescript": "^5.9.3"
+  }
+}

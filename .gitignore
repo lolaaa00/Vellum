@@ -1,0 +1,14 @@
+node_modules
+.next
+.env
+.env.local
+.venv
+__pycache__
+.pytest_cache
+*.pyc
+.vercel
+.env*
+VELLUM-final.zip
+CLAUDE_FINISH.md
+docs/REVIEW_READINESS.md
+tsconfig.tsbuildinfo

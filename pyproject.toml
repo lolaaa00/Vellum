@@ -1,0 +1,9 @@
+[project]
+name = "vellum"
+version = "0.1.0"
+description = "Constitutional execution rails for governed treasuries on GenLayer."
+requires-python = ">=3.12"
+
+[tool.pytest.ini_options]
+testpaths = ["tests/direct"]
+pythonpath = ["tests/direct"]
