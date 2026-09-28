@@ -17,6 +17,10 @@ jobs:
       - run: genvm-lint check contracts/vellum.py
       - run: genvm-lint validate contracts/vellum.py
       - run: genvm-lint typecheck contracts/vellum.py
+      - name: Share pinned GenVM bundle with Direct Mode
+        run: |
+          mkdir -p /home/runner/.cache/gltest-direct
+          cp /home/runner/.cache/genvm-linter/genvm-universal-genlayerlabs-genvm-manager-v0.6.0-rc6.tar.xz /home/runner/.cache/gltest-direct/genvm-universal-v0.6.0-rc6.tar.xz
       - run: pytest tests/direct -q
   frontend:
     runs-on: ubuntu-latest
