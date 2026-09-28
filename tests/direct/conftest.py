@@ -2,6 +2,12 @@ import json
 import time
 from datetime import datetime, timezone
 
+import gltest.direct.loader as direct_loader
+
+# The repository pins the StudioNet-compatible SDK in requirements.txt. Avoid the
+# legacy Direct Mode downloader, whose retired release URL is no longer available.
+direct_loader.setup_sdk_paths = lambda *_args, **_kwargs: []
+
 CONTRACT = "contracts/vellum.py"
 ATTO = 10**18
 SOURCE = "https://example.org/constitution"
