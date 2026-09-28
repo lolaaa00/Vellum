@@ -1,12 +1,42 @@
 import json
+import sys
 import time
 from datetime import datetime, timezone
+from pathlib import Path
 
 import gltest.direct.loader as direct_loader
+import gltest.direct.sdk_loader as direct_sdk_loader
+import pytest
 
-# The repository pins the StudioNet-compatible SDK in requirements.txt. Avoid the
-# legacy Direct Mode downloader, whose retired release URL is no longer available.
-direct_loader.setup_sdk_paths = lambda *_args, **_kwargs: []
+# GenVM lint extracts the exact contract SDK before this suite in CI. Reuse it
+# instead of the legacy Direct Mode downloader, whose retired URL returns 404.
+SDK_PATH = Path.home() / ".cache/genvm-linter/extracted/genlayerlabs-genvm-manager-v0.6.0-rc6/py-lib-genlayer-std/11rhn002yfajawsz7fai6mykznbxkxs6l91iskj5cm82c92qhy3v"
+
+
+def _use_pinned_sdk(*_args, **_kwargs):
+    if not SDK_PATH.is_dir():
+        raise RuntimeError("Pinned GenVM SDK is missing; run genvm-lint check contracts/vellum.py first")
+    if str(SDK_PATH) not in sys.path:
+        sys.path.insert(0, str(SDK_PATH))
+    return [SDK_PATH]
+
+
+direct_loader.setup_sdk_paths = _use_pinned_sdk
+direct_sdk_loader.setup_sdk_paths = _use_pinned_sdk
+
+
+@pytest.fixture(autouse=True)
+def use_pinned_installed_sdk(monkeypatch, direct_vm):
+    monkeypatch.setattr(direct_sdk_loader, "setup_sdk_paths", _use_pinned_sdk)
+    _use_pinned_sdk()
+    from gltest.direct import wasi_mock
+    wasi_mock.set_vm(direct_vm)
+    sys.modules["_genlayer_wasi"] = wasi_mock
+    direct_loader._inject_message_to_fd0(direct_vm)
+    from genlayer.gl import genvm_contracts
+    genvm_contracts.__known_contract__ = None
+    yield
+    genvm_contracts.__known_contract__ = None
 
 CONTRACT = "contracts/vellum.py"
 ATTO = 10**18
