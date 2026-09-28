@@ -5,7 +5,7 @@ import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { Card, PageHead, Stat, Tag } from '@/components/ui';
 import { TxNotice } from '@/components/TxNotice';
-import { getMandate, writeFn } from '@/lib/genlayer/vellum';
+import { getMandate, txStateFromError, writeFn } from '@/lib/genlayer/vellum';
 import type { Mandate, TxState } from '@/lib/types';
 import { dateTime, gen, parseGen } from '@/lib/format';
 import { useWallet } from '@/lib/wallet/WalletProvider';
@@ -33,11 +33,13 @@ export default function MandatePage() {
       setTx({ kind: 'signing', message: `${label}: waiting for wallet signature.` });
       const r = await writeFn(w.address, functionName, args, value, (hash) =>
         setTx({ kind: 'pending', hash, message: `${label}: waiting for GenLayer acceptance.` }),
+        (hash) => setTx({ kind: 'accepted', hash, message: `${label}: accepted; waiting for finalization and execution proof.` }),
+        `mandate:${x?.id ?? p.id}`,
       );
-      setTx({ kind: 'accepted', hash: r.hash, message: `${label} accepted.` });
+      setTx({ kind: 'finalized', hash: r.hash, message: `${label}: finalized with successful GenVM execution.` });
       await load();
-    } catch (e: any) {
-      setTx({ kind: 'error', message: e?.message || String(e) });
+    } catch (e: unknown) {
+      setTx(txStateFromError(e));
     }
   };
 
@@ -55,8 +57,8 @@ export default function MandatePage() {
     <div className="grid4">
       <Stat label="Available" value={`${gen(x.available)} GEN`} />
       <Stat label="Reserved" value={`${gen(x.reserved)} GEN`} />
+      <Stat label="Appeal exposure" value={`${gen(x.appeal_liability)} GEN`} />
       <Stat label="Spent" value={`${gen(x.spent)} GEN`} />
-      <Stat label="Ceiling" value={`${gen(x.max_amount)} GEN`} />
     </div>
 
     <section className="section grid2">
@@ -68,11 +70,12 @@ export default function MandatePage() {
           <dt>Created</dt><dd>{dateTime(x.created_at)}</dd>
           <dt>Funded</dt><dd>{gen(x.funded)} GEN</dd>
           <dt>Withdrawn</dt><dd>{gen(x.withdrawn)} GEN</dd>
+          <dt>Open motions</dt><dd>{x.open_motions}</dd>
         </dl>
       </Card>
       <Card>
         <div className="kicker">Execution model</div>
-        <p>PERMITTED motions reserve balance immediately, remain challengeable for 24 hours, then may release GEN directly to their beneficiary. Blocked motions never touch the mandate treasury.</p>
+        <p>PERMITTED motions reserve balance immediately. A non-PERMITTED motion locks equal provisional appeal exposure until its one appeal is resolved or its window closes. Neither lock is withdrawable, and both are counted exactly once.</p>
       </Card>
     </section>
 
@@ -85,7 +88,7 @@ export default function MandatePage() {
         </form>
       </Card>
       <Card>
-        <div className="sectionHead"><h2>Owner controls</h2><p>reserved funds cannot be withdrawn</p></div>
+        <div className="sectionHead"><h2>Owner controls</h2><p>reservations and live appeal exposure cannot be withdrawn</p></div>
         <form className="form" onSubmit={(e: FormEvent) => { e.preventDefault(); void transact('withdraw_available', [x.id, parseGen(withdrawal)], 0n, 'Withdraw available'); }}>
           <div className="field"><label>Withdraw GEN</label><input className="input" value={withdrawal} onChange={(e) => setWithdrawal(e.target.value)} /></div>
           <div className="formActions">

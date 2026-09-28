@@ -1,32 +1,16 @@
 {
-  "project": "VELLUM",
   "network": "GenLayer StudioNet",
   "chainId": 61999,
   "rpcUrl": "https://studio.genlayer.com/api",
   "explorerUrl": "https://explorer-studio.genlayer.com",
-  "contractAddress": "0xc3A73ddf6DC8aa166e749f4D12a702758B4ea7Dd",
-  "transactionHash": "0x44e52f2cda4f43eb474d9ae7fc893f8f6c228f4130bc3d45b4a7db204de104db",
-  "deployer": "0xaa18eCD158AEC67c75A51768b747cb3247A21689",
-  "status": "FINALIZED",
+  "website": "https://vellum-eight-azure.vercel.app",
+  "contractAddress": "0x505C287A44a39a968157933c316174652fb83BfF",
+  "deploymentTransaction": "0x1d7f787a7f5b8941dd9334c2a34e8c9c2a9c121883691b632b8fc58f75995613",
+  "deploymentStatus": "FINALIZED",
   "consensusResult": "MAJORITY_AGREE",
-  "validatorVotes": {
-    "agree": 5,
-    "total": 5
-  },
-  "executionResult": "SUCCESS",
-  "sourceSha256": "80721d6a457d6619adcd0b3c65c32618e19cd00ed5a82a8a84658cf9ec4fed8",
-  "deployedAt": "2026-09-27T22:05:50.963745+00:00",
-  "application": {
-    "productionUrl": "https://vellum-eight-azure.vercel.app",
-    "deploymentUrl": "https://vellum-ppldnqvps-lolaas-projects.vercel.app",
-    "deploymentId": "dpl_34iFLqEXVbQLy6Vq4owfEZ9t9Y72",
-    "status": "READY"
-  },
-  "supersededFailedAttempt": {
-    "transactionHash": "0xbd8e7aa4cd9ea78de8113105d3d869a52c33b7878d40fe30df54e8af68a38bb5",
-    "reportedAddress": "0x56539b743158ceE4cf27709E25fc7F835Ff35904",
-    "executionResult": "ERROR",
-    "error": "invalid_contract",
-    "usable": false
+  "leaderExecution": "SUCCESS",
+  "supersedes": {
+    "contractAddress": "0xc3A73ddf6DC8aa166e749f4D12a702758B4ea7Dd",
+    "deploymentTransaction": "0x44e52f2cda4f43eb474d9ae7fc893f8f6c228f4130bc3d45b4a7db204de104db"
   }
 }

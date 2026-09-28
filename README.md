@@ -16,7 +16,7 @@ The core lifecycle is:
 4. **Consensus review** — validators fetch evidence and independently judge `PERMITTED`, `CONDITIONAL`, `CONFLICT`, or `INSUFFICIENT_EVIDENCE`.
 5. **Reserve** — only `PERMITTED` motions reserve escrow.
 6. **Challenge** — one bounded appeal may add evidence during the 24-hour window.
-7. **Execute** — after the window, only a still-`PERMITTED` motion can transfer reserved GEN to the beneficiary.
+7. **Execute or expire** — after the window, only a still-`PERMITTED` motion under a live mandate can transfer reserved GEN; an expired mandate routes the motion through `expire_motion`, releases its lock and refunds bonds.
 8. **Receipt** — the frontend exposes the rationale, material clause, risk class and lifecycle as a readable consensus receipt.
 
 ## StudioNet only
@@ -53,6 +53,7 @@ The visual system is original: cream paper, rose, wine, sage and lilac with an e
 - deterministic code owns budget arithmetic, reservation, expiry, roles and native transfers;
 - one permitted motion cannot be overbooked by later motions because reservation reduces available balance immediately;
 - no execution before the challenge window;
+- expired reviewed motions cannot execute: the UI detects mandate expiry and calls the contract's deterministic expiry path;
 - one appeal only, restricted to governance participants and bonded;
 - HTTPS evidence URLs are bounded and obvious private/local targets are rejected;
 - no centralized backend decides the result.
@@ -84,9 +85,9 @@ npm run build
 
 The production application is live at [vellum-eight-azure.vercel.app](https://vellum-eight-azure.vercel.app).
 
-- contract: `0xc3A73ddf6DC8aa166e749f4D12a702758B4ea7Dd`
-- deployment transaction: `0x44e52f2cda4f43eb474d9ae7fc893f8f6c228f4130bc3d45b4a7db204de104db`
+- contract: `0x505C287A44a39a968157933c316174652fb83BfF`
+- deployment transaction: `0x1d7f787a7f5b8941dd9334c2a34e8c9c2a9c121883691b632b8fc58f75995613`
 - network: GenLayer StudioNet, chain `61999`
-- deployment status: finalized, unanimous validator agreement, successful execution
+- deployment status: finalized, majority validator agreement, successful leader execution
 
 The complete machine-readable record is in `artifacts/deployment.json`.

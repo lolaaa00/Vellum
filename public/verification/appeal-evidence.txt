@@ -1,0 +1,8 @@
+VELLUM APPEAL APPROVAL RECORD
+
+Purpose: VELLUM StudioNet review lifecycle verification.
+Beneficiary: 0xdf4bd302ce78b36c987ac34ce6b2592491984646.
+Approved amount: 0.10 GEN.
+Approval token: VELLUM-APPROVAL-2026-09-28.
+
+This is the missing approval record contemplated by the verification charter. It authorizes the stated beneficiary and amount for the stated purpose.

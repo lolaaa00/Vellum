@@ -3,6 +3,8 @@ import { CONTRACT_ADDRESS, isConfigured } from '@/lib/config';
 import { readClient, writeClient } from './client';
 import { estimateFees } from './fees';
 import type { Charter, Mandate, Motion } from '@/lib/types';
+import { classifyFinalizedReceipt } from './finality';
+export { classifyFinalizedReceipt, txStateFromError } from './finality';
 
 const norm = (v:any):any => v instanceof Map ? Object.fromEntries([...v.entries()].map(([k,x])=>[String(k),norm(x)])) : Array.isArray(v) ? v.map(norm) : (v && typeof v==='object' ? Object.fromEntries(Object.entries(v).map(([k,x])=>[k,norm(x)])) : v);
 const address = () => { if(!isConfigured()) throw new Error('NEXT_PUBLIC_VELLUM_CONTRACT_ADDRESS is not configured'); return CONTRACT_ADDRESS as `0x${string}`; };
@@ -16,16 +18,47 @@ export const listMandates=(start=1,limit=20)=>readFn<Mandate[]>('list_mandates',
 export const listMotions=(start=1,limit=30)=>readFn<Motion[]>('list_motions',[start,limit]);
 export const getClaimable=(who:string)=>readFn<string>('get_claimable',[who]);
 
-export async function writeFn(account:string,functionName:string,args:unknown[]=[],value=0n,onHash?:(h:string)=>void){
+
+type StoredWrite = { hash:string; actionLabel:string; objectId?:string; submittedAt:string; account:string; chainId:number; status:'submitted'|'accepted'|'finalized'|'failed'|'uncertain' };
+const STORAGE_KEY='vellum:transactions:v1';
+
+function saveWrite(next:StoredWrite){
+  if(typeof window==='undefined')return;
+  let items:StoredWrite[]=[];
+  try{items=JSON.parse(localStorage.getItem(STORAGE_KEY)||'[]')}catch{}
+  const merged=[next,...items.filter(x=>x.hash.toLowerCase()!==next.hash.toLowerCase())].slice(0,50);
+  localStorage.setItem(STORAGE_KEY,JSON.stringify(merged));
+}
+
+export async function writeFn(account:string,functionName:string,args:unknown[]=[],value=0n,onHash?:(h:string)=>void,onAccepted?:(h:string)=>void,objectId?:string){
   const c:any=writeClient(account); const req:any={address:address(),functionName,args,value};
+  let submittedHash='';
   try {
     await c.connect('studionet');
     const fees=await estimateFees(c,req).catch(()=>undefined);
-    const hash=await c.writeContract({...req,...(fees?{fees}:{})}); onHash?.(String(hash));
-    const receipt=await c.waitForTransactionReceipt({hash,status:'ACCEPTED',retries:60,interval:5000});
-    return {hash:String(hash),receipt:norm(receipt)};
+    const hash=await c.writeContract({...req,...(fees?{fees}:{})}); submittedHash=String(hash);
+    saveWrite({hash:submittedHash,actionLabel:functionName,objectId,submittedAt:new Date().toISOString(),account,chainId:61999,status:'submitted'});
+    onHash?.(submittedHash);
+    await c.waitForTransactionReceipt({hash,waitUntil:'decided',fullTransaction:true,retries:60,interval:5000});
+    saveWrite({hash:submittedHash,actionLabel:functionName,objectId,submittedAt:new Date().toISOString(),account,chainId:61999,status:'accepted'});
+    onAccepted?.(submittedHash);
+    const receipt=norm(await c.waitForTransactionReceipt({hash,waitUntil:'finalized',fullTransaction:true,retries:180,interval:5000}));
+    const outcome=classifyFinalizedReceipt(receipt);
+    if(!outcome.ok){
+      saveWrite({hash:submittedHash,actionLabel:functionName,objectId,submittedAt:new Date().toISOString(),account,chainId:61999,status:'failed'});
+      throw new Error(outcome.reason);
+    }
+    saveWrite({hash:submittedHash,actionLabel:functionName,objectId,submittedAt:new Date().toISOString(),account,chainId:61999,status:'finalized'});
+    return {hash:submittedHash,receipt};
   } catch (error) {
-    throw new Error(explainWriteError(error));
+    const message=explainWriteError(error);
+    if(submittedHash&&/timeout|taking longer|not found|fetch failed|network/i.test(message)){
+      saveWrite({hash:submittedHash,actionLabel:functionName,objectId,submittedAt:new Date().toISOString(),account,chainId:61999,status:'uncertain'});
+      const pending=Object.assign(new Error(`Transaction submitted, but finality could not be confirmed. Use the explorer link to reconcile it before retrying. ${message}`),{hash:submittedHash,uncertain:true});
+      throw pending;
+    }
+    const failed=Object.assign(new Error(message),submittedHash?{hash:submittedHash}:{});
+    throw failed;
   }
 }
 

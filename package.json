@@ -9,6 +9,7 @@
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
+    "test": "vitest run",
     "test:contract": "python -m pytest tests/direct -q",
     "lint:contract": "genvm-lint check contracts/vellum.py && genvm-lint validate contracts/vellum.py && genvm-lint typecheck contracts/vellum.py",
     "deploy": "genlayer deploy"
@@ -26,6 +27,7 @@
     "eslint": "^9.36.0",
     "eslint-config-next": "^15.5.25",
     "genlayer": "^0.40.0-rc.3",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.4"
   }
 }

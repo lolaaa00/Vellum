@@ -9,6 +9,7 @@ export function ClaimButton() {
   const [amount, setAmount] = useState('0');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [phase, setPhase] = useState('');
   const refresh = async () => {
     if (!w.address || !w.correct) { setAmount('0'); return; }
     try { setAmount(await getClaimable(w.address)); setError(''); }
@@ -25,11 +26,12 @@ export function ClaimButton() {
     onClick={async () => {
       if (!w.address) return;
       try {
-        setBusy(true); setError('');
-        await writeFn(w.address, 'claim', []);
+        setBusy(true); setError(''); setPhase('Signing…');
+        await writeFn(w.address, 'claim', [], 0n, () => setPhase('Submitted…'), () => setPhase('Accepted · finalizing…'), `account:${w.address}`);
+        setPhase('Finalized');
         await refresh();
       } catch (e: any) { setError(e?.message || String(e)); }
       finally { setBusy(false); }
     }}
-  >{busy ? 'Claiming…' : error ? 'Claim unavailable' : `Claim ${gen(amount)} GEN`}</button>;
+  >{busy ? phase || 'Claiming…' : error ? 'Claim unavailable' : phase === 'Finalized' ? 'Claim finalized' : `Claim ${gen(amount)} GEN`}</button>;
 }

@@ -63,6 +63,7 @@ class Charter:
     scope: str
     parent_id: u256
     published_at: u256
+    open_motions: u256
     active: bool
 
 
@@ -78,6 +79,8 @@ class Mandate:
     spent: u256
     withdrawn: u256
     reserved: u256
+    appeal_liability: u256
+    open_motions: u256
     expires_at: u256
     created_at: u256
     active: bool
@@ -108,6 +111,9 @@ class Motion:
     appeal_evidence_json: str
     appeal_bond: u256
     evidence_digest: str
+    liability_locked: bool
+    reservation_state: str
+    execution_block_reason: str
 
 
 def _now() -> int:
@@ -167,6 +173,8 @@ def _parse_urls(raw: str) -> list[str]:
 def _extract_json(raw) -> dict:
     if isinstance(raw, dict):
         return raw
+    if isinstance(raw, bytes):
+        raw = raw.decode("utf-8", errors="strict")
     if isinstance(raw, str):
         first = raw.find("{")
         last = raw.rfind("}")
@@ -424,6 +432,7 @@ class Vellum(gl.Contract):
             scope=scope,
             parent_id=u256(parent_id),
             published_at=u256(_now()),
+            open_motions=u256(0),
             active=True,
         )
         return cid
@@ -433,6 +442,8 @@ class Vellum(gl.Contract):
         charter = self._charter(charter_id)
         if gl.message.sender_address != charter.sponsor:
             raise gl.vm.UserError("only charter sponsor may deactivate")
+        if int(charter.open_motions) != 0:
+            raise gl.vm.UserError("cannot deactivate charter while motions remain open")
         charter.active = False
 
     # ----------------------------- mandate treasury
@@ -464,6 +475,8 @@ class Vellum(gl.Contract):
             spent=u256(0),
             withdrawn=u256(0),
             reserved=u256(0),
+            appeal_liability=u256(0),
+            open_motions=u256(0),
             expires_at=u256(expires_at),
             created_at=u256(_now()),
             active=True,
@@ -476,6 +489,8 @@ class Vellum(gl.Contract):
         mandate = self._mandate(mandate_id)
         if not mandate.active or _now() >= int(mandate.expires_at):
             raise gl.vm.UserError("mandate is not fundable")
+        if not self._charter(int(mandate.charter_id)).active:
+            raise gl.vm.UserError("charter is inactive")
         value = int(gl.message.value)
         if value <= 0:
             raise gl.vm.UserError("funding value must be positive")
@@ -500,8 +515,10 @@ class Vellum(gl.Contract):
         mandate = self._mandate(mandate_id)
         if gl.message.sender_address != mandate.owner:
             raise gl.vm.UserError("only mandate owner may deactivate")
-        if int(mandate.reserved) != 0:
-            raise gl.vm.UserError("cannot deactivate while funds are reserved")
+        if int(mandate.open_motions) != 0:
+            raise gl.vm.UserError("cannot deactivate mandate while motions remain open")
+        if int(mandate.reserved) != 0 or int(mandate.appeal_liability) != 0:
+            raise gl.vm.UserError("cannot deactivate while treasury locks remain")
         mandate.active = False
 
     # ----------------------------- motions
@@ -551,11 +568,18 @@ class Vellum(gl.Contract):
             appeal_evidence_json="[]",
             appeal_bond=u256(0),
             evidence_digest=result["evidence_digest"],
+            liability_locked=result["verdict"] != PERMITTED,
+            reservation_state="RESERVED" if result["verdict"] == PERMITTED else "APPEAL_LIABILITY",
+            execution_block_reason="CHALLENGE_OPEN",
         )
         self.motions[u256(motion_id)] = motion
         self.total_bonded += u256(bond)
         if motion.verdict == PERMITTED:
             mandate.reserved += u256(amount)
+        else:
+            mandate.appeal_liability += u256(amount)
+        mandate.open_motions += u256(1)
+        charter.open_motions += u256(1)
         return motion_id
 
     @gl.public.write.payable
@@ -567,6 +591,12 @@ class Vellum(gl.Contract):
             raise gl.vm.UserError("challenge window has closed")
         mandate = self._mandate(int(motion.mandate_id))
         charter = self._charter(int(mandate.charter_id))
+        if not mandate.active:
+            raise gl.vm.UserError("mandate is inactive")
+        if not charter.active:
+            raise gl.vm.UserError("charter is inactive")
+        if _now() + CHALLENGE_WINDOW >= int(mandate.expires_at):
+            raise gl.vm.UserError("mandate expires before the appealed challenge window can complete")
         if gl.message.sender_address not in (motion.proposer, mandate.owner, charter.sponsor):
             raise gl.vm.UserError("appeal is restricted to motion proposer, mandate owner or charter sponsor")
         argument = _bounded(argument, MAX_APPEAL_ARGUMENT, "appeal argument")
@@ -589,15 +619,21 @@ class Vellum(gl.Contract):
         now_permitted = result["verdict"] == PERMITTED
         if was_permitted and not now_permitted:
             mandate.reserved -= motion.amount
+            motion.reservation_state = "NONE"
         elif not was_permitted and now_permitted:
-            if int(motion.amount) > self._available(mandate):
-                # The semantic appeal succeeded, but another motion consumed the budget.
-                result["verdict"] = INSUFFICIENT_EVIDENCE
-                result["risk_class"] = "SPEND"
-                result["rationale"] = "The appeal changed the semantic result, but the mandate no longer has enough unreserved escrow."
-                now_permitted = False
-            else:
-                mandate.reserved += motion.amount
+            if not motion.liability_locked or int(mandate.appeal_liability) < int(motion.amount):
+                raise gl.vm.UserError("appeal liability invariant failed")
+            mandate.appeal_liability -= motion.amount
+            motion.liability_locked = False
+            mandate.reserved += motion.amount
+            motion.reservation_state = "RESERVED"
+
+        if not now_permitted and motion.liability_locked:
+            if int(mandate.appeal_liability) < int(motion.amount):
+                raise gl.vm.UserError("appeal liability invariant failed")
+            mandate.appeal_liability -= motion.amount
+            motion.liability_locked = False
+            motion.reservation_state = "NONE"
 
         motion.verdict = result["verdict"]
         motion.risk_class = result["risk_class"]
@@ -614,6 +650,7 @@ class Vellum(gl.Contract):
         motion.appeal_argument = argument
         motion.appeal_evidence_json = extra_evidence_urls_json
         motion.appeal_bond = u256(bond)
+        motion.execution_block_reason = "CHALLENGE_OPEN" if now_permitted else "SEMANTIC_VERDICT"
         self.total_bonded += u256(bond)
         return motion.verdict
 
@@ -627,6 +664,11 @@ class Vellum(gl.Contract):
         if motion.verdict != PERMITTED:
             raise gl.vm.UserError("only PERMITTED motions can execute")
         mandate = self._mandate(int(motion.mandate_id))
+        charter = self._charter(int(mandate.charter_id))
+        if not mandate.active:
+            raise gl.vm.UserError("mandate is inactive")
+        if not charter.active:
+            raise gl.vm.UserError("charter is inactive")
         if _now() >= int(mandate.expires_at):
             raise gl.vm.UserError("mandate expired before execution")
         if int(mandate.reserved) < int(motion.amount):
@@ -637,6 +679,9 @@ class Vellum(gl.Contract):
         self.total_escrowed -= motion.amount
         self.total_paid += motion.amount
         motion.status = STATUS_EXECUTED
+        motion.reservation_state = "EXECUTED"
+        motion.execution_block_reason = ""
+        self._close_motion_authority(mandate, charter)
         self._refund_motion_bonds(motion)
         self._emit(motion.beneficiary, int(motion.amount))
 
@@ -649,7 +694,12 @@ class Vellum(gl.Contract):
             raise gl.vm.UserError("challenge window is still open")
         if motion.verdict == PERMITTED:
             raise gl.vm.UserError("permitted motion must be executed or appealed")
+        mandate = self._mandate(int(motion.mandate_id))
+        charter = self._charter(int(mandate.charter_id))
+        self._release_motion_lock(mandate, motion)
         motion.status = STATUS_CLOSED
+        motion.execution_block_reason = "SEMANTIC_VERDICT"
+        self._close_motion_authority(mandate, charter)
         self._refund_motion_bonds(motion)
 
     @gl.public.write
@@ -659,13 +709,13 @@ class Vellum(gl.Contract):
         if motion.status != STATUS_REVIEWED:
             raise gl.vm.UserError("motion is already terminal")
         mandate = self._mandate(int(motion.mandate_id))
+        charter = self._charter(int(mandate.charter_id))
         if _now() < int(mandate.expires_at):
             raise gl.vm.UserError("mandate has not expired")
-        if motion.verdict == PERMITTED:
-            if int(mandate.reserved) < int(motion.amount):
-                raise gl.vm.UserError("reservation invariant failed")
-            mandate.reserved -= motion.amount
+        self._release_motion_lock(mandate, motion)
         motion.status = STATUS_CLOSED
+        motion.execution_block_reason = "MANDATE_EXPIRED"
+        self._close_motion_authority(mandate, charter)
         self._refund_motion_bonds(motion)
 
     @gl.public.write
@@ -688,8 +738,27 @@ class Vellum(gl.Contract):
             if url not in merged:
                 merged.append(url)
         if len(merged) > MAX_EVIDENCE_URLS:
-            merged = merged[:MAX_EVIDENCE_URLS]
+            raise gl.vm.UserError(f"combined evidence exceeds {MAX_EVIDENCE_URLS} URLs")
         return json.dumps(merged)
+
+    def _release_motion_lock(self, mandate: Mandate, motion: Motion) -> None:
+        if motion.reservation_state == "RESERVED":
+            if int(mandate.reserved) < int(motion.amount):
+                raise gl.vm.UserError("reservation invariant failed")
+            mandate.reserved -= motion.amount
+            motion.reservation_state = "NONE"
+        if motion.liability_locked:
+            if int(mandate.appeal_liability) < int(motion.amount):
+                raise gl.vm.UserError("appeal liability invariant failed")
+            mandate.appeal_liability -= motion.amount
+            motion.liability_locked = False
+            motion.reservation_state = "NONE"
+
+    def _close_motion_authority(self, mandate: Mandate, charter: Charter) -> None:
+        if int(mandate.open_motions) <= 0 or int(charter.open_motions) <= 0:
+            raise gl.vm.UserError("open motion invariant failed")
+        mandate.open_motions -= u256(1)
+        charter.open_motions -= u256(1)
 
     def _refund_motion_bonds(self, motion: Motion) -> None:
         total = int(motion.bond) + int(motion.appeal_bond)
@@ -710,12 +779,12 @@ class Vellum(gl.Contract):
 
     def _emit(self, to: Address, amount: int) -> None:
         try:
-            gl.chain.Account(to).emit_transfer(u256(amount), on="finalized")
+            gl.get_contract_at(to).emit_transfer(value=u256(amount), on="finalized")
         except Exception:
             raise gl.vm.UserError("native transfer could not be enqueued")
 
     def _available(self, m: Mandate) -> int:
-        return int(m.funded) - int(m.spent) - int(m.withdrawn) - int(m.reserved)
+        return int(m.funded) - int(m.spent) - int(m.withdrawn) - int(m.reserved) - int(m.appeal_liability)
 
     def _ensure_live_mandate(self, m: Mandate) -> None:
         if not m.active:
@@ -754,6 +823,7 @@ class Vellum(gl.Contract):
             "scope": c.scope,
             "parent_id": int(c.parent_id),
             "published_at": int(c.published_at),
+            "open_motions": int(c.open_motions),
             "active": c.active,
         }
 
@@ -769,6 +839,8 @@ class Vellum(gl.Contract):
             "spent": str(m.spent),
             "withdrawn": str(m.withdrawn),
             "reserved": str(m.reserved),
+            "appeal_liability": str(m.appeal_liability),
+            "open_motions": int(m.open_motions),
             "available": str(self._available(m)),
             "expires_at": int(m.expires_at),
             "created_at": int(m.created_at),
@@ -798,4 +870,9 @@ class Vellum(gl.Contract):
             "appeal_argument": m.appeal_argument,
             "appeal_evidence_json": m.appeal_evidence_json,
             "evidence_digest": m.evidence_digest,
+            "liability_locked": m.liability_locked,
+            "reservation_state": m.reservation_state,
+            "execution_block_reason": m.execution_block_reason,
+            "consensus_backed_fields": ["verdict", "risk_class", "evidence_digest"],
+            "explanatory_fields": ["rationale", "material_clause", "missing_fact"],
         }

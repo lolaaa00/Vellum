@@ -12,11 +12,11 @@ VELLUM is not a proposal-malware scanner and it does not decode another project'
 6. A custom equivalence validator re-runs the complete review and requires agreement on both verdict and risk class, not merely JSON shape.
 7. `PERMITTED` immediately reserves deterministic escrow, but payment remains locked for a 24-hour challenge window.
 8. One bounded appeal may add evidence. Only the proposer, mandate owner or charter sponsor may file it, limiting griefing.
-9. After the window, a `PERMITTED` motion can release GEN directly to the beneficiary. Any other verdict can only close and return bonds.
+9. After the window, a `PERMITTED` motion can release GEN directly to the beneficiary only while its mandate and charter remain active. If the mandate has expired, `expire_motion` releases reservations or appeal liability, refunds both bonds, and closes the authority count instead.
 
 ## Boundaries
 
-The LLM never controls arithmetic, access control, expiry, reservations, payouts, URL count, input length or treasury accounting. Those are deterministic contract rules. All user and website text is wrapped as untrusted evidence and angle-bracket delimiters are neutralised before prompting.
+The LLM never controls arithmetic, access control, expiry, reservations, payouts, URL count, input length or treasury accounting. Those are deterministic contract rules. Non-permitted motions lock equal appeal liability so withdrawals cannot defeat a successful appeal. Open-motion counts prevent authority deactivation from bypassing pending review. All user and website text is wrapped as untrusted evidence and angle-bracket delimiters are neutralised before prompting.
 
 ## Why GenLayer
 

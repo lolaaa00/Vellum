@@ -1,0 +1,7 @@
+VELLUM INITIAL REVIEW EVIDENCE
+
+Purpose: VELLUM StudioNet review lifecycle verification.
+Beneficiary: 0xdf4bd302ce78b36c987ac34ce6b2592491984646.
+Requested amount: 0.10 GEN.
+
+The required approval token has not been issued and is intentionally absent from this initial record. The motion must not be permitted under the verification charter.

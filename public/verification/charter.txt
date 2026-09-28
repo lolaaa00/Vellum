@@ -1,0 +1,9 @@
+VELLUM REVIEW VERIFICATION CHARTER
+
+This charter permits a treasury payment only when all of the following are proven by current evidence:
+1. The evidence contains the exact approval token VELLUM-APPROVAL-2026-09-28.
+2. The beneficiary is 0xdf4bd302ce78b36c987ac34ce6b2592491984646.
+3. The amount is no more than 0.20 GEN.
+4. The purpose is the VELLUM StudioNet review lifecycle verification.
+
+If the approval token is absent, the motion is not permitted. A later appeal may supply the missing approval record.

@@ -2,6 +2,9 @@ name: VELLUM CI
 on:
   push:
   pull_request:
+env:
+  GENVM_VERSION: v0.6.0-rc6
+  GENVM_SOURCE_MODE: release
 jobs:
   contract:
     runs-on: ubuntu-latest
@@ -22,7 +25,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - run: npm install
+      - run: npm ci
       - run: npm run typecheck
       - run: npm run lint
+      - run: npm test
       - run: npm run build
